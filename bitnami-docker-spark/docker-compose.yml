@@ -12,6 +12,7 @@ services:
     ports:
       - '8081:8080'
     volumes:
+      - ./data:/data
       - ./spark:/spark
   spark-worker-1:
     image: docker.io/bitnami/spark:3
@@ -24,6 +25,8 @@ services:
       - SPARK_RPC_ENCRYPTION_ENABLED=no
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
       - SPARK_SSL_ENABLED=no
+    volumes:
+      - ./data:/data
   spark-worker-2:
     image: docker.io/bitnami/spark:3
     environment:
@@ -35,6 +38,8 @@ services:
       - SPARK_RPC_ENCRYPTION_ENABLED=no
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
       - SPARK_SSL_ENABLED=no
+    volumes:
+      - ./data:/data
   zeppelin:
     image: apache/zeppelin:0.9.0
     ports:
@@ -42,6 +47,7 @@ services:
     volumes:
       - ./spark:/zeppelin/spark
       - ./notebooks:/opt/zeppelin/notebook
+      - ./data:/data
     environment:
       - "MASTER=spark://spark:7077"
       - "SPARK_MASTER=spark://spark:7077"
