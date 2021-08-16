@@ -43,6 +43,6 @@ services:
       - ./spark:/zeppelin/spark
       - ./notebooks:/zeppelin/notebook
     environment:
-      - "MASTER=spark://spark-master:7077"
-      - "SPARK_MASTER=spark://spark-master:7077"
+      - "MASTER=spark://spark:7077"
+      - "SPARK_MASTER=spark://spark:7077"
       - "SPARK_HOME=/zeppelin/spark"
