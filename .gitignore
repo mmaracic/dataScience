@@ -1,5 +1,7 @@
-/anaconda/notebooks/Sensors/infinum
 /anaconda/notebooks/Tensorflow/signs
 /bitnami-docker-spark/spark
 /bitnami-docker-spark/notebooks
 /bitnami-docker-spark/data
+/anaconda/notebooks/AIOps/span-parquet
+/anaconda/notebooks/Sensors/2020_sensor_data
+/anaconda/notebooks/Sensors/parquet
