@@ -1,5 +1,8 @@
 jupyter_contrib_nbextensions
 jupyter_nbextensions_configurator
 tensorflow
+scikit-learn
 scikit-image
+statsmodels
 vaex
+seaborn
