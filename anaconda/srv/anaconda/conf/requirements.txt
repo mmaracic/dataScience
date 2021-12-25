@@ -6,3 +6,4 @@ scikit-image
 statsmodels
 vaex
 seaborn
+feature-engine
