@@ -3,6 +3,9 @@
 Docker compose source (with added fixes)
 https://github.com/umbraesoulsbane/anaconda
 
+# Anaconda
+Password to login in to jupyter notebooks is "password".
+
 # Zeppelin and Spark
 
 Spark source:

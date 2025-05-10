@@ -4,6 +4,10 @@ tensorflow
 scikit-learn
 scikit-image
 statsmodels
-vaex
 seaborn
 feature-engine
+transformers
+torch
+accelerate
+protobuf
+sentencepiece
