@@ -6,6 +6,25 @@ https://github.com/umbraesoulsbane/anaconda
 # Anaconda
 Password to login in to jupyter notebooks is "password".
 
+## Pip libraries
+### Main
+* jupyter_contrib_nbextensions - Contains a collection of extensions that add functionality to the Jupyter notebook. These extensions are mostly written in Javascript, and are loaded locally in the browser.
+* jupyter_nbextensions_configurator - The jupyter_nbextensions_configurator jupyter server extension provides graphical user interfaces for configuring which nbextensions are enabled
+* tensorflow
+* scikit-learn
+* scikit-image
+* statsmodels - provides a complement to scipy for statistical computations including descriptive statistics and estimation and inference for statistical models.
+* seaborn
+* feature-engine - Feature-engine is a Python library with multiple transformers to engineer and select features for use in machine learning models.
+* transformers
+* torch
+* accelerate - Run your *raw* PyTorch training script on any kind of device. Accelerate abstracts exactly and only the boilerplate code related to multi-GPUs/TPU/fp16 and leaves the rest of your code unchanged.
+* protobuf - Protocol buffers are Google’s language-neutral, platform-neutral, extensible mechanism for serializing structured data – think XML, but smaller, faster, and simpler.
+* sentencepiece - SentencePiece is an unsupervised text tokenizer and detokenizer mainly for Neural Network-based text generation systems where the vocabulary size is predetermined prior to the neural model training
+* gensim -  library for topic modelling, document indexing and similarity retrieval with large corpora
+
+### Extra
+
 # Zeppelin and Spark
 
 Spark source:

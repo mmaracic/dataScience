@@ -11,3 +11,4 @@ torch
 accelerate
 protobuf
 sentencepiece
+gensim
