@@ -8,8 +8,8 @@ Password to login in to jupyter notebooks is "password".
 
 ## Pip libraries
 ### Main
-* jupyter_contrib_nbextensions - Contains a collection of extensions that add functionality to the Jupyter notebook. These extensions are mostly written in Javascript, and are loaded locally in the browser.
-* jupyter_nbextensions_configurator - The jupyter_nbextensions_configurator jupyter server extension provides graphical user interfaces for configuring which nbextensions are enabled
+* jupyter_contrib_nbextensions - Contains a collection of extensions that add functionality to the Jupyter notebook. These extensions are mostly written in Javascript, and are loaded locally in the browser. #Does not work with newer Jupyter versions
+* jupyter_nbextensions_configurator - The jupyter_nbextensions_configurator jupyter server extension provides graphical user interfaces for configuring which nbextensions are enabled. #Does not work with newer Jupyter versions
 * tensorflow
 * scikit-learn
 * scikit-image

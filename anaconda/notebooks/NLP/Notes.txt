@@ -1,0 +1,2 @@
+Partially unzip Windows.log.zip from https://www.kaggle.com/datasets/omduggineni/loghub-windows-log-data (first 10 000 lines)
+gunzip < Windows.log.zip | head -n 10000 > WindowsTop10000.log
