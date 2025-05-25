@@ -5,4 +5,10 @@
 /anaconda/notebooks/AIOps/span-parquet
 /anaconda/notebooks/Sensors/2020_sensor_data
 /anaconda/notebooks/Sensors/parquet
+/anaconda/notebooks/Sensors/*.pdf
 /anaconda/notebooks/AIOps/parquet
+.venv
+.ipynb_checkpoints
+.Trash-0
+/anaconda/notebooks/Titanic/*.csv
+/anaconda/notebooks/NLP/big-data
