@@ -1,0 +1,13 @@
+scikit-learn
+scikit-image
+statsmodels
+seaborn
+feature-engine
+protobuf
+sentencepiece
+gensim
+
+fastapi
+pydantic
+uvicorn
+requests

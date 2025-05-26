@@ -133,3 +133,18 @@ Then, run the following code to update your SSL certificate:
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 ```  
+# Start app
+* Activate the local python environment .venv
+* In the folder where application is, run:
+```
+uvicorn anomaly-detection:app --app-dir . --host 127.0.0.1 --port 8000
+```
+App-dir option sets the runtime folder of the app to root project folder which results in package names as expected by .py files. 
+
+# App access
+Access:  
+http://localhost:8000/docs  
+To see FastAPI swagger page with information
+
+Available POST API is on:  
+http://localhost:8000/train

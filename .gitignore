@@ -10,5 +10,6 @@
 .venv
 .ipynb_checkpoints
 .Trash-0
+__pycache__
 /anaconda/notebooks/Titanic/*.csv
 /anaconda/notebooks/NLP/big-data
