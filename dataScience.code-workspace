@@ -4,5 +4,57 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Debug anomaly detection as uvicorn app",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "uvicorn",
+				"args": [
+					"anomaly-detection:app",
+					"--app-dir",
+					"${workspaceFolder}/anomaly-detection",
+					"--host",
+					"127.0.0.1",
+					"--port",
+					"8000"
+				],
+				"jinja": true,
+				"justMyCode": true,
+				"console": "integratedTerminal",
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}"
+				},
+				"envFile": "${workspaceFolder}/.env"
+			},
+			{
+				"name": "Debug anomaly detection as uvicorn app with reload",
+				"type": "debugpy",
+				"request": "launch",
+				"module": "uvicorn",
+				"args": [
+					"anomaly-detection:app",
+					"--app-dir",
+					"${workspaceFolder}/anomaly-detection",
+					"--reload",
+					"--reload-dir",
+					"${workspaceFolder}/anomaly-detection",
+					"--host",
+					"127.0.0.1",
+					"--port",
+					"8000"
+				],
+				"jinja": true,
+				"justMyCode": true,
+				"console": "integratedTerminal",
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}"
+				},
+				"envFile": "${workspaceFolder}/.env"
+			}
+		]
+	}
 }

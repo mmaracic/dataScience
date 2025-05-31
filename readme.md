@@ -137,7 +137,7 @@ ssl._create_default_https_context = ssl._create_unverified_context
 * Activate the local python environment .venv
 * In the folder where application is, run:
 ```
-uvicorn anomaly-detection:app --app-dir . --host 127.0.0.1 --port 8000
+uvicorn anomaly-detection:app --app-dir . --host 127.0.0.1 --port 8000 --reload --reload-dir .
 ```
 App-dir option sets the runtime folder of the app to root project folder which results in package names as expected by .py files. 
 
@@ -147,4 +147,6 @@ http://localhost:8000/docs
 To see FastAPI swagger page with information
 
 Available POST API is on:  
-http://localhost:8000/train
+http://localhost:8000/setup  
+http://localhost:8000/train?database=WindowsLog&start=0&end=1000  
+http://localhost:8000/test?database=WindowsLog&start=1001&end=1100  
