@@ -13,3 +13,4 @@
 __pycache__
 /anaconda/notebooks/Titanic/*.csv
 /anaconda/notebooks/NLP/big-data
+output
