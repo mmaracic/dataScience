@@ -52,7 +52,7 @@ def test_api(database: str, start: int, end: int, filename: str = None):
     testing_embeddings = process_embeddings(testing_embeddings, sample_max_len)
     prediction = classifier.predict(testing_embeddings)
     f = open(filename, 'w') if filename is not None else None
-    return result_output(prediction, lines, f)
+    return result_output(start, prediction, lines, f)
 
 def setup():
     global embedding
@@ -80,11 +80,11 @@ def train(database: str, start: int, end: int) -> int:
     logger.info(f"Classifier trained successfully. Sample max length: {sample_max_len}")
     return len(training_embeddings)
 
-def result_output(predictions, lines, f:TextIOWrapper):
+def result_output(start_index: int, predictions, lines, f:TextIOWrapper):
     import json
     output = []
     for i, line in enumerate(lines):
-        result = {"line": line, "anomaly_prediction": float(predictions[i])}
+        result = {"index": start_index+i, "line": line, "anomaly_prediction": float(predictions[i])}
         output.append(result)
         if f is not None:
             f.write(f"{json.dumps(result)}\n")
@@ -108,7 +108,7 @@ def read_range_of_embeddings_from_zip(database: str, start: int, end: int, embed
                 if _ < start:
                     continue
                 else:
-                    embeddings, lines = process_line(line, embeddings, lines)
+                    embeddings, lines = process_line(database, line, embeddings, lines)
     return embeddings, lines
 
 def read_range_of_embeddings_from_text(database: str, start: int, end: int, embeddings: list, lines: list):
@@ -118,14 +118,14 @@ def read_range_of_embeddings_from_text(database: str, start: int, end: int, embe
             if _ < start:
                 continue
             else:
-                embeddings, lines = process_line(line, embeddings, lines)
+                embeddings, lines = process_line(database, line, embeddings, lines)
     return embeddings, lines
 
-def process_line(line: str, embeddings: list, lines: list):
+def process_line(database: str, line: str, embeddings: list, lines: list):
     if embedding is None:
         logger.error(MODEL_NOT_FOUND)
         return embeddings, lines
-    words = split_log(line)
+    words = split_log(line, database)
     if (not words) or (len(words) == 0):
         logger.warning(f"Empty line encountered: {line}")
     else:
@@ -146,5 +146,8 @@ def add_items(l: list, target_len: int) -> list:
         l.append(0)
     return l
 
-def split_log(log: str) -> list:
-    return log.split()
+def split_log(log: str, database: str) -> list:
+    if database == "WindowsLog":
+        return log.split()
+    else:
+        return log.split()
