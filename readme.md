@@ -149,4 +149,4 @@ To see FastAPI swagger page with information
 Available POST API is on:  
 http://localhost:8000/setup  
 http://localhost:8000/train?database=WindowsLog&start=0&end=1000  
-http://localhost:8000/test?database=WindowsLog&start=1001&end=1100  
+http://localhost:8000/test?database=WindowsLog&start=1001&end=10000&filename=results.txt

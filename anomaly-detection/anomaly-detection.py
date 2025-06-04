@@ -1,3 +1,4 @@
+from io import TextIOWrapper
 from fastapi import BackgroundTasks, FastAPI
 from gensim import models
 from sklearn.ensemble import IsolationForest
@@ -35,7 +36,7 @@ def train_api(database: str, start: int, end: int):
     return {"status": f"Finished training with {train_embeddings_len} embeddings from {start} to {end} in {database}"}
 
 @app.get("/test")
-def test_api(database: str, start: int, end: int):
+def test_api(database: str, start: int, end: int, filename: str = None):
     global sample_max_len
     global classifier
     if classifier is None:
@@ -50,7 +51,8 @@ def test_api(database: str, start: int, end: int):
         return {"status": "No testing embeddings generated."}
     testing_embeddings = process_embeddings(testing_embeddings, sample_max_len)
     prediction = classifier.predict(testing_embeddings)
-    return result_output(prediction, lines)
+    f = open(filename, 'w') if filename is not None else None
+    return result_output(prediction, lines, f)
 
 def setup():
     global embedding
@@ -75,16 +77,17 @@ def train(database: str, start: int, end: int) -> int:
     classifier = IsolationForest(n_estimators=100, warm_start=True)
     logger.info("Classifier initialized")
     classifier.fit(training_embeddings)
-    logger.info("Classifier trained successfully")
+    logger.info(f"Classifier trained successfully. Sample max length: {sample_max_len}")
     return len(training_embeddings)
 
-def result_output(predictions, lines):
+def result_output(predictions, lines, f:TextIOWrapper):
+    import json
     output = []
     for i, line in enumerate(lines):
-        if predictions[i] == -1:
-            output.append({"line": line, "anomaly": True})
-        else:
-            output.append({"line": line, "anomaly": False})
+        result = {"line": line, "anomaly_prediction": float(predictions[i])}
+        output.append(result)
+        if f is not None:
+            f.write(f"{json.dumps(result)}\n")
     return output
 
 def read_range_of_embeddings(database, start, end):
