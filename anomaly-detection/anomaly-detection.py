@@ -148,6 +148,18 @@ def add_items(l: list, target_len: int) -> list:
 
 def split_log(log: str, database: str) -> list:
     if database == "WindowsLog":
-        return log.split()
+        date_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
+        time_pattern = re.compile(r"\d{2}:\d{2}:\d{2},")
+        tokens = re.split(r'[\s~_\-/\\]+', log)
+        return [
+            w for w in tokens
+            if not (date_pattern.fullmatch(w) or time_pattern.fullmatch(w))
+        ]
     else:
-        return log.split()
+        pattern = re.compile(r"\[(\d{2})/([A-Za-z]{3})/(\d{4}):(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})\]")
+        tokens = re.split(r'[\s~_\-/\\]+', log)
+        return [
+            w for w in tokens
+            if not (pattern.fullmatch(w))
+        ]
+    
