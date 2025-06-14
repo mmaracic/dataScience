@@ -22,13 +22,28 @@ class SampleSource(ABC):
         match = re.search(pattern, s)
         return match.group(0) if match else None
 
-    def read_range_of_embeddings(self, start: int, end: int):
+    def read_log(self):
         if zipfile.is_zipfile(self.get_path()):
-            yield self.read_range_of_embeddings_from_zip(start, end)
+            yield self.read_log_from_zip()
         else:
-            yield self.read_range_of_embeddings_from_text(start, end)
+            yield self.read_log_from_text()
 
-    def read_range_of_embeddings_from_zip(self, start: int, end: int):
+    def read_log_from_zip(self):
+        with zipfile.ZipFile(self.get_path()) as z:
+            with z.open(...) as f:
+                yield f.readline().decode('utf-8')
+
+    def read_log_from_text(self):
+        with open(self.get_path(), 'r') as f:
+            yield f.readline()
+
+    def read_range_of_logs(self, start: int, end: int):
+        if zipfile.is_zipfile(self.get_path()):
+            yield self.read_range_of_logs_from_zip(start, end)
+        else:
+            yield self.read_range_of_logs_from_text(start, end)
+
+    def read_range_of_logs_from_zip(self, start: int, end: int):
         with zipfile.ZipFile(self.get_path()) as z:
             with z.open(...) as f:
                 for _ in range(end):
@@ -38,7 +53,7 @@ class SampleSource(ABC):
                     else:
                         yield line
 
-    def read_range_of_embeddings_from_text(self, start: int, end: int):
+    def read_range_of_logs_from_text(self, start: int, end: int):
         with open(self.get_path(), 'r') as f:
             for _ in range(end):
                 line = f.readline()

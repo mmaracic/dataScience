@@ -1,11 +1,12 @@
 #pylint: disable=W1514,W0603,W1203,C0114,C0116,C0115
 import logging
 from datetime import datetime
-from io import TextIOWrapper
 import json
+import os
 
 from fastapi import BackgroundTasks, FastAPI
 from gensim import models
+from numpy import ndarray
 from sklearn.ensemble import IsolationForest
 from database_processors import WindowsLogSource, SampleSource
 
@@ -17,6 +18,7 @@ EMBEDDINGS = {
     "FastText":"/mnt/d/Data/NLP/crawl-300d-2M-subword.bin",
 }
 
+DATABASE_NOT_INITIALIZED = "Database is not initialized. Please set up the database first."
 MODEL_NOT_FOUND = "Embedding model is not loaded."
 CLASSIFIER_NOT_INITIALIZED = "Classifier is not initialized."
 
@@ -24,30 +26,39 @@ app = FastAPI()
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Global variables
+database: SampleSource = None
 dictionary = None
 classifier = None
 sample_max_len = 0
 training_logs = []
+training_embeddings = []
 max_training_logs = 1
 logs_since_training = 0
 max_logs_since_training = 1
 
 @app.get("/setup")
-def setup_api(background_tasks: BackgroundTasks, training_size: int = 1000, training_batch_size: int = 100):
+def setup_api(background_tasks: BackgroundTasks, database_name: str, training_size: int = 1000, training_batch_size: int = 100):
     global max_training_logs
     global max_logs_since_training
+    global database
     max_training_logs = training_size if training_size>0 else 1
     max_logs_since_training = training_batch_size if training_batch_size>0 else 1
+    database = DATABASES[database_name]
     background_tasks.add_task(setup)
     return {"status": "Setup started"}
 
 @app.get("/train")
-def train_api(database: str, start: int, end: int):
-    train_embeddings_len = train(database, start, end)
-    return {"status": f"Finished training with {train_embeddings_len} embeddings from {start} to {end} in {database}"}
+def train_api(start: int, end: int):
+    train_samples(start, end)
+    train_model()
+    return {"status": f"Finished training with {len(training_logs)} logs from {start} to {end} in {database}"}
 
 @app.get("/test")
-def test_api(database: str, start: int, end: int, filename: str = None):
+def test_api(start: int, end: int):
+    if database is None:
+        logger.error(DATABASE_NOT_INITIALIZED)
+        return {"status": DATABASE_NOT_INITIALIZED}
     if classifier is None:
         logger.error(CLASSIFIER_NOT_INITIALIZED)
         return {"status": CLASSIFIER_NOT_INITIALIZED}
@@ -55,31 +66,28 @@ def test_api(database: str, start: int, end: int, filename: str = None):
         logger.error(MODEL_NOT_FOUND)
         return {"status": MODEL_NOT_FOUND}
     testing_samples:list[tuple] = []
-    for line in DATABASES[database].read_range_of_embeddings(start, end):
-        embedding, line = process_line(database, line)
+    for line in database.read_range_of_embeddings(start, end):
+        embedding, line = process_line(line)
         testing_samples.append(tuple(embedding, line))
-    valid_testing_samples = [emb for emb in testing_samples if emb[0] is not None]
-    if len(valid_testing_samples) == 0:
-        logger.error("No testing embeddings generated. Please check the database and range.")
+    prediction, valid_testing_logs = test_samples(testing_samples)
+    if len(valid_testing_logs) == 0:
         return {"status": "No testing embeddings generated."}
-    logger.info(f"Testing samples created, {len(valid_testing_samples)} valid samples  out of {len(testing_samples)} logs")
-    valid_testing_embeddings = [smp[0] for smp in testing_samples]
-    valid_testing_logs = [smp[1] for smp in testing_samples]
-    processed_valid_testing_embeddings = process_embeddings(valid_testing_embeddings)
-    prediction = classifier.predict(processed_valid_testing_embeddings)
-    f = open(filename, 'w') if filename is not None else None
-    interpretation = result_output(database, start, prediction, valid_testing_logs, f)
-    if f is not None:
-        f.close()
+    interpretation = result_json_output(start, end, prediction, valid_testing_logs)
     return interpretation
 
-def stream_samples(sample: str):
+@app.get("/test_stream")
+def test_stream_api():
+    if database is None:
+        logger.error(DATABASE_NOT_INITIALIZED)
+        return {"status": DATABASE_NOT_INITIALIZED}
     if dictionary is None:
         logger.error(MODEL_NOT_FOUND)
         return {"status": MODEL_NOT_FOUND}
     if classifier is None:
         logger.error(CLASSIFIER_NOT_INITIALIZED)
         return {"status": CLASSIFIER_NOT_INITIALIZED}
+    log = database.read_log()
+    stream_sample(log)
 
 def setup():
     global dictionary
@@ -87,18 +95,27 @@ def setup():
     dictionary = models.fasttext.load_facebook_vectors(EMBEDDINGS["FastText"])
     logger.info("Embedding loaded successfully")
 
-def train(database: str, start: int, end: int) -> int:
-    global classifier
-    global sample_max_len
+def train_samples(start: int, end: int):
     logger.info(f"Training with database: {database}, start: {start}, end: {end}")
+    if database is None:
+        logger.error(DATABASE_NOT_INITIALIZED)
+        return 0
     if dictionary is None:
         logger.error(MODEL_NOT_FOUND)
         return 0
-    training_embeddings = []
-    for line in DATABASES[database].read_range_of_embeddings(start, end):
-        embedding, line = process_line(database, line)
+    training_logs.clear()
+    training_embeddings.clear()
+    global logs_since_training
+    logs_since_training = 0
+    for line in database.read_range_of_embeddings(start, end):
+        embedding, line = process_line(line)
         training_logs.append(line)
         training_embeddings.append(embedding)
+    logger.info(f"Training logs collected, {len(training_logs)} logs")
+
+def train_model():
+    global classifier
+    global sample_max_len
     valid_training_embeddings = [emb for emb in training_embeddings if emb is not None]
     if len(valid_training_embeddings) == 0:
         logger.error("No embeddings generated. Please check the database and range.")
@@ -112,20 +129,59 @@ def train(database: str, start: int, end: int) -> int:
     logger.info(f"Classifier trained successfully. Sample max length: {sample_max_len}")
     return len(processed_valid_training_embeddings)
 
-def result_output(database: str, start_index: int, predictions, lines, f:TextIOWrapper):
+def test_samples(testing_samples: list[tuple]) -> tuple[ndarray, list]:
+    valid_testing_samples = [emb for emb in testing_samples if emb[0] is not None]
+    if len(valid_testing_samples) == 0:
+        logger.error("No testing embeddings generated. Please check the database and range.")
+        return tuple([], [])
+    logger.info(f"Testing samples created, {len(valid_testing_samples)} valid samples  out of {len(testing_samples)} logs")
+    valid_testing_embeddings = [smp[0] for smp in testing_samples]
+    valid_testing_logs = [smp[1] for smp in testing_samples]
+    processed_valid_testing_embeddings = process_embeddings(valid_testing_embeddings)
+    prediction = classifier.predict(processed_valid_testing_embeddings)
+    return prediction, valid_testing_logs
+
+def stream_sample(sample: str):
+    embedding = accumulate_log_and_train_model(sample)
+    prediction, _ = test_samples([(embedding, sample)])
+    prediction_correction = prediction[0] if len(prediction) > 0 else 0
+    result_txt_output(0, 0, prediction_correction)
+    return prediction_correction
+
+
+def get_filename(start_index: int, end_index: int, time: str, extension: str) -> str:
+    return f"results_{start_index}_{end_index}_{time}.{extension}"
+
+def result_json_output(start_index: int, end_index: int, predictions, lines) -> list:
+    time = datetime.now().isoformat()
     output = {}
     output["database"] = database
-    output["timestamp"] = datetime.now().isoformat()
+    output["timestamp"] = time
+    output["start_index"] = start_index
+    output["end_index"] = end_index
+    output["sample_max_len"] = sample_max_len
     results = []
     for i, line in enumerate(lines):
         result = {"index": start_index+i, "line": line, "anomaly_prediction": float(predictions[i])}
         results.append(result)
     output["results"] = results
-    if f is not None:
+    with open(get_filename(start_index, end_index, time, "json"), "w") as f:
         f.write(json.dumps(output))
     return results
 
-def process_line(database: SampleSource, line: str):
+def result_txt_output(start_index: int, index: int, prediction: float):
+    time = datetime.now().isoformat()
+    end_index = 0
+    filename = get_filename(start_index, end_index, time, "txt")
+    if os.path.exists(filename):
+        with open(filename, "a") as f:
+            f.write(f"{index}\t{prediction}\n")
+    else:
+        with open(filename, "w") as f:
+            f.write(f"{database}\n{time}\n{start_index}\n{end_index}\n{sample_max_len}\n")
+            f.write(f"{index}\t{prediction}\n")
+
+def process_line(line: str):
     if dictionary is None:
         logger.error(MODEL_NOT_FOUND)
         raise ValueError(MODEL_NOT_FOUND)
@@ -149,13 +205,20 @@ def add_components(l: list, target_len: int) -> list:
         l.append(0)
     return l
 
-def accumulate_log(log: str):
+def accumulate_log_and_train_model(log: str) -> list:
     global logs_since_training
     logs_since_training = logs_since_training + 1
+    embedding, _ = process_line(log)
+    if embedding is None:
+        logger.warning(f"Skipping log due to empty embedding: {log}")
+        return []
     training_logs.append(log)
+    training_embeddings.append(embedding)
     if len(training_logs) >= max_training_logs:
         training_logs.pop(0)
-
+        training_embeddings.pop(0)
+    
     if logs_since_training >= max_logs_since_training:
-        
+        train_model()
         logs_since_training = 0
+    return embedding
