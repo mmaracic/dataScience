@@ -7,6 +7,10 @@ class SampleSource(ABC):
     def __init__(self, file_path: str):
         self.file_path = file_path
 
+    @abstractmethod
+    def __str__(self):
+        pass
+
     def get_path(self) -> str:
         return self.file_path
 
@@ -24,9 +28,9 @@ class SampleSource(ABC):
 
     def read_log(self):
         if zipfile.is_zipfile(self.get_path()):
-            yield self.read_log_from_zip()
+            return self.read_log_from_zip()
         else:
-            yield self.read_log_from_text()
+            return self.read_log_from_text()
 
     def read_log_from_zip(self):
         with zipfile.ZipFile(self.get_path()) as z:
@@ -39,9 +43,9 @@ class SampleSource(ABC):
 
     def read_range_of_logs(self, start: int, end: int):
         if zipfile.is_zipfile(self.get_path()):
-            yield self.read_range_of_logs_from_zip(start, end)
+            return self.read_range_of_logs_from_zip(start, end)
         else:
-            yield self.read_range_of_logs_from_text(start, end)
+            return self.read_range_of_logs_from_text(start, end)
 
     def read_range_of_logs_from_zip(self, start: int, end: int):
         with zipfile.ZipFile(self.get_path()) as z:
@@ -76,6 +80,9 @@ class WindowsLogSource(SampleSource):
 
     def get_log_idenfifier(self, log: str) -> str:
         return self.get_matching_part(log, self.date_time_pattern)
+    
+    def __str__(self):
+        return "WindowsLogSource"
 
 class WebServerLogSource(SampleSource):
     pattern = re.compile(r"\[(\d{2})/([A-Za-z]{3})/(\d{4}):(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})\]")
@@ -88,3 +95,6 @@ class WebServerLogSource(SampleSource):
         ]
     def get_log_idenfifier(self, log: str) -> str:
         return self.get_matching_part(log, self.pattern)
+
+    def __str__(self):
+        return "WebServerLogSource"

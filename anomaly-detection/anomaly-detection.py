@@ -12,7 +12,7 @@ from classifier import Classifier, IsolationForestClassifier
 from embedder import Embedder, FastTextEmbedder
 
 DATABASES = {
-    "WindowsLog": WindowsLogSource("/mnt/d/Data/NLP/WindowsTop10000.zip")
+    "WindowsLog": WindowsLogSource("/mnt/d/Data/NLP/WindowsTop10000.log")
 }
 
 EMBEDDINGS = {
@@ -74,9 +74,9 @@ def test_api(start: int, end: int):
         logger.error(MODEL_NOT_FOUND)
         return {"status": MODEL_NOT_FOUND}
     testing_samples:list[tuple] = []
-    for line in database.read_range_of_embeddings(start, end):
+    for line in database.read_range_of_logs(start, end):
         embedding, line = process_line(line)
-        testing_samples.append(tuple(embedding, line))
+        testing_samples.append((embedding, line))
     prediction, valid_testing_logs = test_samples(testing_samples)
     if len(valid_testing_logs) == 0:
         return {"status": "No testing embeddings generated."}
@@ -118,7 +118,7 @@ def train_samples(start: int, end: int):
     training_embeddings.clear()
     global logs_since_training
     logs_since_training = 0
-    for line in database.read_range_of_embeddings(start, end):
+    for line in database.read_range_of_logs(start, end):
         embedding, line = process_line(line)
         training_logs.append(line)
         training_embeddings.append(embedding)
@@ -141,7 +141,7 @@ def test_samples(testing_samples: list[tuple]) -> tuple[ndarray, list]:
     valid_testing_samples = [emb for emb in testing_samples if emb[0] is not None]
     if len(valid_testing_samples) == 0:
         logger.error("No testing embeddings generated. Please check the database and range.")
-        return tuple([], [])
+        return [], []
     logger.info(f"Testing samples created, {len(valid_testing_samples)} valid samples  out of {len(testing_samples)} logs")
     valid_testing_embeddings = [smp[0] for smp in testing_samples]
     valid_testing_logs = [smp[1] for smp in testing_samples]
@@ -158,12 +158,12 @@ def stream_sample(sample: str):
 
 
 def get_filename(start_index: int, end_index: int, time: str, extension: str) -> str:
-    return f"results_{start_index}_{end_index}_{time}.{extension}"
+    return f"./output/results_{str(database)}_{start_index}_{end_index}_{time}.{extension}"
 
 def result_json_output(start_index: int, end_index: int, predictions, lines) -> list:
     time = datetime.now().isoformat()
     output = {}
-    output["database"] = database
+    output["database"] = str(database)
     output["timestamp"] = time
     output["start_index"] = start_index
     output["end_index"] = end_index
@@ -186,7 +186,7 @@ def result_txt_output(start_index: int, index: int, prediction: float):
             f.write(f"{index}\t{prediction}\n")
     else:
         with open(filename, "w") as f:
-            f.write(f"{database}\n{time}\n{start_index}\n{end_index}\n{sample_max_len}\n")
+            f.write(f"{str(database)}\n{time}\n{start_index}\n{end_index}\n{sample_max_len}\n")
             f.write(f"{index}\t{prediction}\n")
 
 def process_line(line: str):
