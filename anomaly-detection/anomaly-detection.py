@@ -12,7 +12,7 @@ from classifier import Classifier, IsolationForestClassifier
 from embedder import Embedder, FastTextEmbedder
 
 DATABASES = {
-    "WindowsLog": WindowsLogSource("/mnt/d/Data/NLP/WindowsTop10000.zip")
+    "WindowsLog": WindowsLogSource("/mnt/d/Data/NLP/WindowsTop10000.log")
 }
 
 EMBEDDINGS = {
@@ -40,7 +40,7 @@ logs_since_training = 0
 max_logs_since_training = 1
 
 @app.get("/setup")
-def setup_api(background_tasks: BackgroundTasks, database_name: str, training_size: int = 1000, training_batch_size: int = 100):
+def setup_api(background_tasks: BackgroundTasks, database_name: str, training_size: int = 1000, training_batch_size: int = 500):
     global max_training_logs
     global max_logs_since_training
     global database
@@ -74,9 +74,9 @@ def test_api(start: int, end: int):
         logger.error(MODEL_NOT_FOUND)
         return {"status": MODEL_NOT_FOUND}
     testing_samples:list[tuple] = []
-    for line in database.read_range_of_embeddings(start, end):
+    for line in database.read_range_of_logs(start, end):
         embedding, line = process_line(line)
-        testing_samples.append(tuple(embedding, line))
+        testing_samples.append((embedding, line))
     prediction, valid_testing_logs = test_samples(testing_samples)
     if len(valid_testing_logs) == 0:
         return {"status": "No testing embeddings generated."}
@@ -94,17 +94,20 @@ def test_stream_api():
     if classifier is None:
         logger.error(CLASSIFIER_NOT_INITIALIZED)
         return {"status": CLASSIFIER_NOT_INITIALIZED}
-    if not classifier.is_trained():
-        logger.error(CLASSIFIER_NOT_TRAINED)
-        return {"status": CLASSIFIER_NOT_TRAINED}
-    log = database.read_log()
-    stream_sample(log)
+    time = datetime.now()
+    index = 0
+    for log in database.read_log():
+        stream_sample(time, index, log)
+        index += 1
 
 def setup():
     global embedder
     logger.info("Loading embeddings")
-    embedder = FastTextEmbedder(EMBEDDINGS["FastText"])
-    logger.info("Embedding loaded successfully")
+    if embedder is None:
+        embedder = FastTextEmbedder(EMBEDDINGS["FastText"])
+        logger.info("Embedding loaded successfully")
+    else:
+        logger.info("Embedding already loaded")
 
 def train_samples(start: int, end: int):
     logger.info(f"Training with database: {database}, start: {start}, end: {end}")
@@ -118,7 +121,7 @@ def train_samples(start: int, end: int):
     training_embeddings.clear()
     global logs_since_training
     logs_since_training = 0
-    for line in database.read_range_of_embeddings(start, end):
+    for line in database.read_range_of_logs(start, end):
         embedding, line = process_line(line)
         training_logs.append(line)
         training_embeddings.append(embedding)
@@ -141,7 +144,7 @@ def test_samples(testing_samples: list[tuple]) -> tuple[ndarray, list]:
     valid_testing_samples = [emb for emb in testing_samples if emb[0] is not None]
     if len(valid_testing_samples) == 0:
         logger.error("No testing embeddings generated. Please check the database and range.")
-        return tuple([], [])
+        return [], []
     logger.info(f"Testing samples created, {len(valid_testing_samples)} valid samples  out of {len(testing_samples)} logs")
     valid_testing_embeddings = [smp[0] for smp in testing_samples]
     valid_testing_logs = [smp[1] for smp in testing_samples]
@@ -149,21 +152,25 @@ def test_samples(testing_samples: list[tuple]) -> tuple[ndarray, list]:
     prediction = classifier.test(processed_valid_testing_embeddings)
     return prediction, valid_testing_logs
 
-def stream_sample(sample: str):
+def stream_sample(time: datetime, index: int, sample: str):
     embedding = accumulate_log_and_train_model(sample)
-    prediction, _ = test_samples([(embedding, sample)])
-    prediction_correction = prediction[0] if len(prediction) > 0 else 0
-    result_txt_output(0, 0, prediction_correction)
+    prediction_correction = None
+    if classifier.is_trained() is True:
+        prediction, _ = test_samples([(embedding, sample)])
+        prediction_correction = prediction[0] if len(prediction) > 0 else 0
+    else:
+        prediction_correction = 0
+    result_txt_output(time, 0, index, prediction_correction)
     return prediction_correction
 
 
 def get_filename(start_index: int, end_index: int, time: str, extension: str) -> str:
-    return f"results_{start_index}_{end_index}_{time}.{extension}"
+    return f"./output/results_{str(database)}_{start_index}_{end_index}_{time}.{extension}"
 
 def result_json_output(start_index: int, end_index: int, predictions, lines) -> list:
     time = datetime.now().isoformat()
     output = {}
-    output["database"] = database
+    output["database"] = str(database)
     output["timestamp"] = time
     output["start_index"] = start_index
     output["end_index"] = end_index
@@ -177,16 +184,17 @@ def result_json_output(start_index: int, end_index: int, predictions, lines) -> 
         f.write(json.dumps(output))
     return results
 
-def result_txt_output(start_index: int, index: int, prediction: float):
-    time = datetime.now().isoformat()
+def result_txt_output(time: datetime, start_index: int, index: int, prediction: float):
+    time_str = time.isoformat()
     end_index = 0
-    filename = get_filename(start_index, end_index, time, "txt")
+    filename = get_filename(start_index, end_index, time_str, "txt")
     if os.path.exists(filename):
         with open(filename, "a") as f:
             f.write(f"{index}\t{prediction}\n")
     else:
         with open(filename, "w") as f:
-            f.write(f"{database}\n{time}\n{start_index}\n{end_index}\n{sample_max_len}\n")
+            f.write(f"{str(database)}\n{time_str}\n{start_index}\n{end_index}\n{sample_max_len}\n")
+            f.write("#Data#\n")
             f.write(f"{index}\t{prediction}\n")
 
 def process_line(line: str):

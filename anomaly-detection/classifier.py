@@ -18,7 +18,7 @@ class Classifier(ABC):
 
 class IsolationForestClassifier(Classifier):
     def __init__(self):
-        self.classifier = IsolationForest(n_estimators=100, warm_start=True)
+        self.classifier = IsolationForest(n_estimators=100, warm_start=False)
 
     def train(self, valid_embeddings: list):
         self.classifier.fit(valid_embeddings)
