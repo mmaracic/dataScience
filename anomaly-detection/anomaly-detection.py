@@ -3,12 +3,13 @@ import logging
 from datetime import datetime
 import json
 import os
+from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI
-from gensim import models
 from numpy import ndarray
-from sklearn.ensemble import IsolationForest
 from database_processors import WindowsLogSource, SampleSource
+from classifier import Classifier, IsolationForestClassifier
+from embedder import Embedder, FastTextEmbedder
 
 DATABASES = {
     "WindowsLog": WindowsLogSource("/mnt/d/Data/NLP/WindowsTop10000.zip")
@@ -21,15 +22,16 @@ EMBEDDINGS = {
 DATABASE_NOT_INITIALIZED = "Database is not initialized. Please set up the database first."
 MODEL_NOT_FOUND = "Embedding model is not loaded."
 CLASSIFIER_NOT_INITIALIZED = "Classifier is not initialized."
+CLASSIFIER_NOT_TRAINED = "Classifier is not trained."
 
 app = FastAPI()
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Global variables
-database: SampleSource = None
-dictionary = None
-classifier = None
+database: Optional[SampleSource] = None
+embedder: Optional[Embedder] = None
+classifier: Optional[Classifier] = None
 sample_max_len = 0
 training_logs = []
 training_embeddings = []
@@ -42,9 +44,12 @@ def setup_api(background_tasks: BackgroundTasks, database_name: str, training_si
     global max_training_logs
     global max_logs_since_training
     global database
+    global classifier
     max_training_logs = training_size if training_size>0 else 1
     max_logs_since_training = training_batch_size if training_batch_size>0 else 1
     database = DATABASES[database_name]
+    classifier = IsolationForestClassifier()
+    logger.info("Classifier initialized")
     background_tasks.add_task(setup)
     return {"status": "Setup started"}
 
@@ -62,7 +67,10 @@ def test_api(start: int, end: int):
     if classifier is None:
         logger.error(CLASSIFIER_NOT_INITIALIZED)
         return {"status": CLASSIFIER_NOT_INITIALIZED}
-    if dictionary is None:
+    if not classifier.is_trained():
+        logger.error(CLASSIFIER_NOT_TRAINED)
+        return {"status": CLASSIFIER_NOT_TRAINED}
+    if embedder is None:
         logger.error(MODEL_NOT_FOUND)
         return {"status": MODEL_NOT_FOUND}
     testing_samples:list[tuple] = []
@@ -80,19 +88,22 @@ def test_stream_api():
     if database is None:
         logger.error(DATABASE_NOT_INITIALIZED)
         return {"status": DATABASE_NOT_INITIALIZED}
-    if dictionary is None:
+    if embedder is None:
         logger.error(MODEL_NOT_FOUND)
         return {"status": MODEL_NOT_FOUND}
     if classifier is None:
         logger.error(CLASSIFIER_NOT_INITIALIZED)
         return {"status": CLASSIFIER_NOT_INITIALIZED}
+    if not classifier.is_trained():
+        logger.error(CLASSIFIER_NOT_TRAINED)
+        return {"status": CLASSIFIER_NOT_TRAINED}
     log = database.read_log()
     stream_sample(log)
 
 def setup():
-    global dictionary
+    global embedder
     logger.info("Loading embeddings")
-    dictionary = models.fasttext.load_facebook_vectors(EMBEDDINGS["FastText"])
+    embedder = FastTextEmbedder(EMBEDDINGS["FastText"])
     logger.info("Embedding loaded successfully")
 
 def train_samples(start: int, end: int):
@@ -100,7 +111,7 @@ def train_samples(start: int, end: int):
     if database is None:
         logger.error(DATABASE_NOT_INITIALIZED)
         return 0
-    if dictionary is None:
+    if embedder is None:
         logger.error(MODEL_NOT_FOUND)
         return 0
     training_logs.clear()
@@ -114,7 +125,6 @@ def train_samples(start: int, end: int):
     logger.info(f"Training logs collected, {len(training_logs)} logs")
 
 def train_model():
-    global classifier
     global sample_max_len
     valid_training_embeddings = [emb for emb in training_embeddings if emb is not None]
     if len(valid_training_embeddings) == 0:
@@ -123,9 +133,7 @@ def train_model():
     sample_max_len = len(max(valid_training_embeddings, key=len))
     processed_valid_training_embeddings = process_embeddings(valid_training_embeddings)
     logger.info(f"Training embeddings created, {len(processed_valid_training_embeddings)} embeddings out of {len(training_logs)} logs")
-    classifier = IsolationForest(n_estimators=100, warm_start=True)
-    logger.info("Classifier initialized")
-    classifier.fit(processed_valid_training_embeddings)
+    classifier.train(processed_valid_training_embeddings)
     logger.info(f"Classifier trained successfully. Sample max length: {sample_max_len}")
     return len(processed_valid_training_embeddings)
 
@@ -138,7 +146,7 @@ def test_samples(testing_samples: list[tuple]) -> tuple[ndarray, list]:
     valid_testing_embeddings = [smp[0] for smp in testing_samples]
     valid_testing_logs = [smp[1] for smp in testing_samples]
     processed_valid_testing_embeddings = process_embeddings(valid_testing_embeddings)
-    prediction = classifier.predict(processed_valid_testing_embeddings)
+    prediction = classifier.test(processed_valid_testing_embeddings)
     return prediction, valid_testing_logs
 
 def stream_sample(sample: str):
@@ -182,7 +190,7 @@ def result_txt_output(start_index: int, index: int, prediction: float):
             f.write(f"{index}\t{prediction}\n")
 
 def process_line(line: str):
-    if dictionary is None:
+    if embedder is None:
         logger.error(MODEL_NOT_FOUND)
         raise ValueError(MODEL_NOT_FOUND)
     words = database.split_log(line)
@@ -190,7 +198,7 @@ def process_line(line: str):
         logger.warning(f"Empty line encountered: {line}")
         return None, line
     else:
-        embedding_matrix = dictionary[words]
+        embedding_matrix = embedder.embed(words)
         embedding_vector = [item for sublist in embedding_matrix for item in sublist]
     return embedding_vector, line
 
@@ -217,7 +225,7 @@ def accumulate_log_and_train_model(log: str) -> list:
     if len(training_logs) >= max_training_logs:
         training_logs.pop(0)
         training_embeddings.pop(0)
-    
+
     if logs_since_training >= max_logs_since_training:
         train_model()
         logs_since_training = 0
