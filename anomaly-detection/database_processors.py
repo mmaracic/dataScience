@@ -8,7 +8,7 @@ class SampleSource(ABC):
         self.file_path = file_path
 
     @abstractmethod
-    def __str__(self):
+    def __str__(self) -> str:
         pass
 
     def get_path(self) -> str:
@@ -19,10 +19,10 @@ class SampleSource(ABC):
         pass
 
     @abstractmethod
-    def get_log_idenfifier(self, log: str) -> str:
+    def get_log_identifier(self, log: str) -> str|None:
         pass
 
-    def get_matching_part(self, s: str, pattern: str) -> str:
+    def get_matching_part(self, s: str, pattern: re.Pattern[str]) -> str|None:
         match = re.search(pattern, s)
         return match.group(0) if match else None
 
@@ -34,7 +34,7 @@ class SampleSource(ABC):
 
     def read_log_from_zip(self):
         with zipfile.ZipFile(self.get_path()) as z:
-            with z.open(...) as f:
+            with z.open(z.namelist()[0]) as f:
                 for line in f:
                     yield line.decode('utf-8')
 
@@ -51,7 +51,7 @@ class SampleSource(ABC):
 
     def read_range_of_logs_from_zip(self, start: int, end: int):
         with zipfile.ZipFile(self.get_path()) as z:
-            with z.open(...) as f:
+            with z.open(z.namelist()[0]) as f:
                 for _ in range(end):
                     line = f.readline().decode('utf-8')
                     if _ < start:
@@ -80,9 +80,9 @@ class WindowsLogSource(SampleSource):
             if not (self.date_pattern.fullmatch(w) or self.time_pattern.fullmatch(w))
         ]
 
-    def get_log_idenfifier(self, log: str) -> str:
+    def get_log_identifier(self, log: str) -> str|None:
         return self.get_matching_part(log, self.date_time_pattern)
-    
+
     def __str__(self):
         return "WindowsLogSource"
 
@@ -95,7 +95,7 @@ class WebServerLogSource(SampleSource):
             w for w in tokens
             if not (self.pattern.fullmatch(w))
         ]
-    def get_log_idenfifier(self, log: str) -> str:
+    def get_log_identifier(self, log: str) -> str|None:
         return self.get_matching_part(log, self.pattern)
 
     def __str__(self):
