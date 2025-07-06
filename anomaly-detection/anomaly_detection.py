@@ -8,6 +8,7 @@ import os
 import json
 from datetime import datetime
 from typing import Optional, cast
+import threading
 
 import numpy as np
 from numpy import ndarray
@@ -15,17 +16,16 @@ from fastapi import BackgroundTasks, FastAPI, Request
 
 from database_processors import WindowsLogSource, WebServerLogSource, SampleSource
 from classifier import Classifier, get_classifier
-import threading
 from embedder import Embedder, FastTextEmbedder
 
 # Database and embedding model paths
 DATABASES: dict[str, SampleSource] = {
-    "WindowsLog": WindowsLogSource("/mnt/d/Data/NLP/WindowsTop10000.log"),
-    "WebServerLog": WebServerLogSource("/mnt/d/Data/NLP/WebServerTop10000.log"),
+    "WindowsLog": WindowsLogSource("/mnt/c/Projects/log-anomaly-detection/FastText/data/WindowsTop10000.log"),
+    "WebServerLog": WebServerLogSource("/mnt/c/Projects/log-anomaly-detection/FastText/data/WebServerTop10000.log"),
 }
 
 EMBEDDINGS: dict[str, str] = {
-    "FastText": "/mnt/d/Data/NLP/crawl-300d-2M-subword.bin",
+    "FastText": "/mnt/c/Projects/log-anomaly-detection/FastText/data/crawl-300d-2M-subword.bin",
 }
 
 # Error/status messages
@@ -47,24 +47,20 @@ class AppState:
         self.embedder: Optional[Embedder] = None
         self.classifier: Optional[Classifier] = None
         self.sample_max_len: int = 0
+        self.num_features: int = 0  # Number of features to select based on kurtosis 
+        self.selected_features: list[int] = [] # Indices of selected features based on kurtosis
         self.training_data: list[tuple[list[str], ndarray|None]] = []
         self.training_logs: list[str] = []
+        self.training_labels: list[int] = []
         self.max_training_logs: int = 1
         self.logs_since_training: int = 0
         self.max_logs_since_training: int = 1
 
 app.state.app_state = AppState()
 
-
-# Raw training logs
-training_logs: list[str] = []
-max_training_logs = 1
-logs_since_training = 0
-max_logs_since_training = 1
-
 @app.get("/setup")
 def setup_api(background_tasks: BackgroundTasks, request: Request, database_name: str, classifier_name: str,
-              training_size: int = 1000, training_batch_size: int = 500):
+              training_size: int = 1000, training_batch_size: int = 500, selected_features: int = 1000):
     """
     Set up the database, classifier, and training parameters.
     """
@@ -72,6 +68,7 @@ def setup_api(background_tasks: BackgroundTasks, request: Request, database_name
     with state.lock:
         state.max_training_logs = training_size if training_size > 0 else 1
         state.max_logs_since_training = training_batch_size if training_batch_size > 0 else 1
+        state.num_features = selected_features if selected_features > 0 else 1000
         state.database = DATABASES[database_name]
         state.classifier = get_classifier(classifier_name)
     logger.info("Classifier initialized")
@@ -96,13 +93,13 @@ def test_api(request: Request, start: int, end: int):
     """
     Test the classifier on a range of logs from the database.
     Returns predictions and metadata as JSON.
-    """
+    """ 
     state = request.app.state.app_state
     with state.lock:
-        status = _check_system_ready(state, require_trained=True)
+        status = check_system_ready(state, require_trained=True)
         if status is not None:
             return status
-        testing_data, testing_logs = _collect_testing_data(start, end, state)
+        testing_data, testing_logs = collect_testing_data(start, end, state)
         if not testing_data:
             return {"status": "No testing embeddings generated."}
         prediction, _, metadata = test_samples(testing_data, state)
@@ -134,7 +131,7 @@ def test_stream_api(request: Request):
             index += 1
         return {"status": f"Processed {index-1} logs from the database in streaming mode."}
 
-def _check_system_ready(state: AppState, require_trained: bool = False):
+def check_system_ready(state: AppState, require_trained: bool = False):
     """
     Helper to check if database, classifier, and embedder are initialized.
     Optionally checks if the classifier is trained.
@@ -154,7 +151,7 @@ def _check_system_ready(state: AppState, require_trained: bool = False):
     return None
 
 
-def _collect_testing_data(start: int, end: int, state: AppState) -> tuple[list[tuple[ndarray, list[str]]], list[str]]:
+def collect_testing_data(start: int, end: int, state: AppState) -> tuple[list[tuple[ndarray, list[str]]], list[str]]:
     """
     Helper to collect embeddings and tokens for testing logs.
     """
@@ -179,7 +176,7 @@ def setup(request: Request):
             logger.info("Embedding already loaded")
 
 
-def train_samples(start: int, end: int, state: AppState):
+def train_samples(start: int, end: int, state: AppState) -> int:
     logger.info(f"Training with database: {state.database}, start: {start}, end: {end}")
     if state.database is None:
         logger.error(DATABASE_NOT_INITIALIZED)
@@ -195,7 +192,7 @@ def train_samples(start: int, end: int, state: AppState):
         state.training_logs.append(line)
         state.training_data.append((tokens, embedding))
     logger.info(f"Training logs collected, {len(state.training_logs)} logs")
-
+    return len(state.training_logs)
 
 def train_model(state:AppState) -> int:
     valid_training_embeddings = [tuple[1] for tuple in state.training_data if tuple[1] is not None]
@@ -209,7 +206,9 @@ def train_model(state:AppState) -> int:
     if state.classifier is None:
         logger.error(CLASSIFIER_NOT_INITIALIZED)
         return 0
-    state.classifier.train(processed_valid_training_embeddings, valid_training_tokens)
+    state.selected_features = select_features(processed_valid_training_embeddings, state)
+    processed_valid_training_embeddings = filter_features(processed_valid_training_embeddings, state)
+    state.classifier.train(processed_valid_training_embeddings, valid_training_tokens, state.training_labels)
     logger.info(f"Classifier trained successfully. Sample max length: {state.sample_max_len}")
     return len(processed_valid_training_embeddings)
 
@@ -222,6 +221,7 @@ def test_samples(testing_samples: list[tuple[ndarray, list[str]]], state:AppStat
     valid_testing_embeddings = [smp[0] for smp in testing_samples]
     valid_testing_tokens = [smp[1] for smp in testing_samples]
     processed_valid_testing_embeddings = process_embeddings(valid_testing_embeddings, state)
+    processed_valid_testing_embeddings = filter_features(processed_valid_testing_embeddings, state)
     valid_metadata = generate_test_metadata(processed_valid_testing_embeddings, state)
     logger.info("Testing metadata created")
     if state.classifier is None:
@@ -329,3 +329,19 @@ def accumulate_log_and_train_model(log: str, state:AppState) -> tuple[ndarray, l
         train_model(state)
         state.logs_since_training = 0
     return embedding, tokens
+
+def select_features(embeddings: list[ndarray], state: AppState) -> list[int]:
+    kurtosis = np.mean((embeddings - np.mean(embeddings, axis=0))**4, axis=0) / np.var(embeddings, axis=0)**2
+    kurtosis = kurtosis.tolist()
+    kurtosis_tuples = [(i, round(k, 2)) for i, k in enumerate(kurtosis)]
+    kurtosis_tuples = sorted(kurtosis_tuples, key=lambda x: x[1], reverse=True)
+    print(f"Will select {state.num_features} features out of {len(kurtosis_tuples)}: {kurtosis_tuples[0][1]}-{kurtosis_tuples[state.num_features][1]}")
+    return [i for i, _ in kurtosis_tuples[:state.num_features]]
+
+def filter_features(embeddings: list[ndarray], state: AppState) -> list[ndarray]:
+    selected_features = state.selected_features
+    if selected_features:
+        filtered_embeddings = [embeddings[selected_features] for embeddings in embeddings]
+        return filtered_embeddings
+
+    return embeddings
