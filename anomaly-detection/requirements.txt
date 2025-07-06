@@ -1,5 +1,6 @@
 scikit-learn
 scikit-image
+scipy
 statsmodels
 seaborn
 feature-engine
@@ -11,3 +12,5 @@ fastapi
 pydantic
 uvicorn
 requests
+
+Levenshtein
