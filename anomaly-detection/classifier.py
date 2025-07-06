@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 import logging
 import numpy as np
 from numpy import ndarray
+
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.cluster import OPTICS
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
@@ -20,7 +22,7 @@ class Classifier(ABC):
         return 1
 
     @abstractmethod
-    def train(self, valid_embeddings:list, valid_words: list[list[str]]):
+    def train(self, valid_embeddings:list, valid_words: list[list[str]], valid_labels: list[int]):
         pass
 
     @abstractmethod
@@ -42,6 +44,8 @@ def get_classifier(classifier_name: str) -> Classifier:
         return OneClassSVMClassifier()
     elif classifier_name == "OpticsClusterClassifier":
         return OpticsClusterClassifier()
+    elif classifier_name == "DecisionTreeClassifier":
+        return DecTreeClassifier()
     elif classifier_name == "MultiClassifierIsoForestLocalOutlier":
         return MultiClassifierIsoForestLocalOutlier()
     elif classifier_name == "MultiClassifierIsoForestOpticsCluster":
@@ -59,9 +63,9 @@ class MultiClassifier(Classifier):
     def __str__(self) -> str:
         return "MultiClassifier_" + "_".join([f" {str(classifier)}" for classifier in self.classifiers])
 
-    def train(self, valid_embeddings: list, valid_words: list[list[str]]):
+    def train(self, valid_embeddings: list, valid_words: list[list[str]], valid_labels: list[int]):
         for classifier in self.classifiers:
-            classifier.train(valid_embeddings, valid_words)
+            classifier.train(valid_embeddings, valid_words, valid_labels)
 
     def test(self, valid_embeddings: list, valid_words: list[list[str]]) -> ndarray:
         results = np.zeros((len(self.classifiers), len(valid_embeddings)))
@@ -83,9 +87,8 @@ class IsolationForestClassifier(Classifier):
     def __str__(self) -> str:
         return "IsolationForestClassifier"
 
-    def train(self, valid_embeddings: list, valid_words: list[list[str]]):
+    def train(self, valid_embeddings: list, valid_words: list[list[str]], valid_labels: list[int]):
         self.classifier.fit(valid_embeddings)
-
 
     def test(self, valid_embeddings: list, valid_words: list[list[str]]) -> ndarray:
         return self.classifier.predict(valid_embeddings)
@@ -104,7 +107,7 @@ class OneClassSVMClassifier(Classifier):
     def __str__(self) -> str:
         return "OneClassSVMClassifier"
 
-    def train(self, valid_embeddings: list, valid_words: list[list[str]]):
+    def train(self, valid_embeddings: list, valid_words: list[list[str]], valid_labels: list[int]):
         self.classifier.fit(valid_embeddings)
 
     def test(self, valid_embeddings: list, valid_words: list[list[str]]) -> ndarray:
@@ -123,7 +126,7 @@ class LocalOutlierFactorClassifier(Classifier):
     def __str__(self) -> str:
         return "LocalOutlierFactorClassifier"
 
-    def train(self, valid_embeddings: list, valid_words: list[list[str]]):
+    def train(self, valid_embeddings: list, valid_words: list[list[str]], valid_labels: list[int]):
         self.classifier.fit(np.array(valid_embeddings))
 
     def test(self, valid_embeddings: list, valid_words: list[list[str]]) -> ndarray:
@@ -144,7 +147,7 @@ class OpticsClusterClassifier(Classifier):
     def __str__(self) -> str:
         return "OpticsClusterClassifier"
 
-    def train(self, valid_embeddings: list, valid_words: list[list[str]]):
+    def train(self, valid_embeddings: list, valid_words: list[list[str]], valid_labels: list[int]):
         self.classifier.fit(np.array(valid_embeddings))
         label_statistics = np.unique(self.classifier.labels_, return_counts=True)
         self.label_counts = dict(zip(label_statistics[0], label_statistics[1]))
@@ -167,6 +170,28 @@ class OpticsClusterClassifier(Classifier):
 
     def clear(self) -> None:
         self.__init__()
+
+
+class DecTreeClassifier(Classifier):
+    
+    def __init__(self, max_depth: int = 10):
+        self.classifier = DecisionTreeClassifier(max_depth=max_depth)
+
+    def __str__(self) -> str:
+        return "DecisionTreeClassifier"
+
+    def train(self, valid_embeddings: list, valid_words: list[list[str]], valid_labels: list[int]):
+        self.classifier.fit(np.array(valid_embeddings), valid_labels)
+
+    def test(self, valid_embeddings: list, valid_words: list[list[str]]) -> ndarray:
+        return self.classifier.predict(np.array(valid_embeddings))
+
+    def is_trained(self) -> bool:
+        return hasattr(self.classifier, 'tree_') and self.classifier.tree_ is not None
+
+    def clear(self) -> None:
+        self.__init__()
+
 
 class MultiClassifierIsoForestLocalOutlier(MultiClassifier):
     def __init__(self):
