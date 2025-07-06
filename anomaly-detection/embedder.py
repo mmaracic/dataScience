@@ -16,3 +16,9 @@ class FastTextEmbedder(Embedder):
 
     def embed(self, tokens: list) -> list[ndarray]:
         return self.model[tokens]
+    
+    def similarity(self, token1: str, token2: str) -> float:
+        """
+        Compute the cosine similarity between two tokens.
+        """
+        return self.model.similarity(token1, token2)
